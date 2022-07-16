@@ -57,5 +57,8 @@ dkms.conf
 # gdb source
 gdb-*
 
+# log files
+*.dlog
+
 # final executable
 gdbRemote

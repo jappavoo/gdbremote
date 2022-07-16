@@ -1,0 +1,13 @@
+#!/bin/bash
+
+total=0
+
+while read r name bs t
+do
+ size=${bs##*=\"}
+ size=${size%%\"*}
+ total=$((total + size))
+ echo $name ":" $bs ":" $size : $total
+done  <<<$(grep '<reg')
+
+echo $((total/8))
