@@ -8,11 +8,11 @@
 #include <gdb/fileio.h>
 #include <stddef.h>
 
-extern char _binary_kex_x86_64_xml_start[];
-extern char _binary_kex_x86_64_xml_end[];
+extern char _binary_gdbremote_x86_64_xml_start[];
+extern char _binary_gdbremote_x86_64_xml_end[];
 
-extern char _binary_kex_i386_xml_start[];
-extern char _binary_kex_i386_xml_end[];
+extern char _binary_gdbremote_i386_xml_start[];
+extern char _binary_gdbremote_i386_xml_end[];
 
 extern void gdbKill(void *state);
 extern int gdbGetRegisters(void *state, union GdbRegState *reg);
@@ -33,7 +33,6 @@ struct XMLDoc {
 
 FILE * DLOGFILE = NULL;
 
-#define DPRINT(...) { if (DLOGFILE) fprintf (DLOGFILE, __VA_ARGS__); }
 
 /* I have tried to separate out the protcol processing from the actual
    state manipulation and communication functionality.  I hope that
@@ -100,14 +99,14 @@ static inline void
 putChar(GdbRemotePutChar pc, void *dstate, char c)
 {
   pc(dstate,c);
-  DPRINT("%c",c);
+  GDR_DPRINTF("%c",c);
 }
 
 static inline char
 getChar(GdbRemoteGetChar gc, void *dstate)
 {
   char c = gc(dstate);
-  DPRINT("%c", c);
+  GDR_DPRINTF("%c", c);
   return c;
 }
 
@@ -123,7 +122,7 @@ getpacket (struct GdbRemoteDesc *grd)
   int count;
   char ch;
 
-  DPRINT("\ngetpacket:\n");
+  GDR_DPRINTF("\ngetpacket:\n");
   while (1)
     {
       /* wait around for the start character, ignore all other characters */
@@ -131,7 +130,7 @@ getpacket (struct GdbRemoteDesc *grd)
 	;
      
 retry:
-      DPRINT("\n< ");
+      GDR_DPRINTF("\n< ");
       checksum = 0;
       xmitcsum = -1;
       count = 0;
@@ -192,7 +191,7 @@ putpacket (struct GdbRemoteDesc *grd, int count)
   unsigned char *buffer = &(grd->outBuffer[0]);
   
   /*  $<packet info>#<checksum>. */
-  DPRINT("\n> putpacket\n");
+  GDR_DPRINTF("\n> putpacket\n");
   do
     {
       putChar(pc, dstate, '$');
@@ -359,16 +358,16 @@ dumpTargetXML()
 {
   unsigned long long i;
   for (i=0; i<targetXML.len; i++) {
-    DPRINT("%c",targetXML.data[i]);
+    GDR_DPRINTF("%c",targetXML.data[i]);
   }
 }
 
 static void
 dumpReg32Map()
 {
-  DPRINT("Validate the following with the output of gdb:  maint print c-tdesc\n");
+  GDR_DPRINTF("Validate the following with the output of gdb:  maint print c-tdesc\n");
   for (int i=0; i<(sizeof(reg32Map)/sizeof(struct RegMap)); i++) {
-    DPRINT("%d: %s: offset:%d len:%d (%d)\n", i,
+    GDR_DPRINTF("%d: %s: offset:%d len:%d (%d)\n", i,
 	   reg32Map[i].name,
 	   reg32Map[i].offset,
 	   reg32Map[i].len,
@@ -398,9 +397,9 @@ breakPointsOn(struct GdbRemoteDesc *grd)
 static void
 dumpReg64Map()
 {
-  DPRINT("Validate the following with the output of gdb:  maint print c-tdesc\n");
+  GDR_DPRINTF("Validate the following with the output of gdb:  maint print c-tdesc\n");
   for (int i=0; i<(sizeof(reg64Map)/sizeof(struct RegMap)); i++) {
-    DPRINT("%d: %s: offset:%d len:%d (%d)\n", i,
+    GDR_DPRINTF("%d: %s: offset:%d len:%d (%d)\n", i,
 	   reg64Map[i].name,
 	   reg64Map[i].offset,
 	   reg64Map[i].len,
@@ -408,9 +407,19 @@ dumpReg64Map()
   }
 }
 
+static void
+GdbOpenDLog(char *path)
+{
+  if (path) {
+    DLOGFILE = fopen(path, "w+");
+    if (DLOGFILE == NULL) err(1, "DLOGFILE");
+    setbuf(DLOGFILE, NULL);
+  }
+}
+
 extern void
 GdbRemoteInit(struct GdbRemoteDesc *grd,
-	      FILE *dlog,
+	      char *dlogPath,
 	      void *state,
 	      GdbRemoteGetChar gcf,
 	      GdbRemotePutChar pcf,
@@ -419,7 +428,7 @@ GdbRemoteInit(struct GdbRemoteDesc *grd,
 	      )
 {
 
-  DLOGFILE = dlog;
+  GdbOpenDLog(dlogPath);
   grd->state = state;
   grd->getChar = gcf;
   grd->putChar = pcf;
@@ -430,20 +439,20 @@ GdbRemoteInit(struct GdbRemoteDesc *grd,
   breakPointsOn(grd);
   if (startSingleStep) singleStepOn(grd);
 
-  DPRINT("reg32State: size in bytes:%lu Number of Registers:%d)\n",
+  GDR_DPRINTF("reg32State: size in bytes:%lu Number of Registers:%d)\n",
 	 sizeof(grd->regState.reg32State), REG32_NUMREG);
   dumpReg32Map();
   
-  DPRINT("reg64State: size in bytes:%lu Number of Registers:%d)\n",
+  GDR_DPRINTF("reg64State: size in bytes:%lu Number of Registers:%d)\n",
 	 sizeof(grd->regState.reg64State), REG64_NUMREG);
   dumpReg64Map();
 
   if (longMode) {
-    targetXML.data = _binary_kex_x86_64_xml_start;
-    targetXML.len = _binary_kex_x86_64_xml_end - _binary_kex_x86_64_xml_start ;
+    targetXML.data = _binary_gdbremote_x86_64_xml_start;
+    targetXML.len = _binary_gdbremote_x86_64_xml_end - _binary_gdbremote_x86_64_xml_start ;
   } else {
-    targetXML.data = _binary_kex_i386_xml_start;
-    targetXML.len = _binary_kex_i386_xml_end - _binary_kex_i386_xml_start;
+    targetXML.data = _binary_gdbremote_i386_xml_start;
+    targetXML.len = _binary_gdbremote_i386_xml_end - _binary_gdbremote_i386_xml_start;
   }
   dumpTargetXML();
   
@@ -502,15 +511,15 @@ processPackets(struct GdbRemoteDesc *grd)
   switch (*ipktPtr++) {
   case '?':
     outBytes = snprintf(&opkt[0], GDBREMOTE_BUFMAX, "S%02d", GDB_SIGNAL_TRAP);
-    DPRINT("GDB: ? : %s\n", opkt);
+    GDR_DPRINTF("GDB: ? : %s\n", opkt);
     break;
   case 'd':
-    DPRINT("GDB: d\n");
+    GDR_DPRINTF("GDB: d\n");
     break;
   case 'g': {
-    DPRINT("GDB: g : \n");
+    GDR_DPRINTF("GDB: g : \n");
     if (gdbGetRegisters(state, &(grd->regState))) {
-      DPRINT("LONG MODE\n");
+      GDR_DPRINTF("LONG MODE\n");
       outBytes = mem2hex(&(opkt[0]), GDBREMOTE_BUFMAX,
 			 (char *)(&(grd->regState.reg64State)),
 			 sizeof(grd->regState.reg64State));
@@ -522,7 +531,7 @@ processPackets(struct GdbRemoteDesc *grd)
   }
     break;
   case 'G': {
-    DPRINT("GDB: G\n");
+    GDR_DPRINTF("GDB: G\n");
     union GdbRegState *reg = &(grd->regState);
     if (gdbIsLongMode(state)) {
       hex2mem(ipktPtr,
@@ -542,7 +551,7 @@ processPackets(struct GdbRemoteDesc *grd)
     break;
   case 'q':
     {
-      DPRINT("\nq packet: %s\n", ipktPtr);
+      GDR_DPRINTF("\nq packet: %s\n", ipktPtr);
       if (strncmp(ipktPtr, "Supported:",10)==0) {
 	// Got supported query from gdb reply back that we
 	// will define the target feature XML 
@@ -557,11 +566,11 @@ processPackets(struct GdbRemoteDesc *grd)
 	uint64_t docLen = targetXML.len;
 	
 	ipktPtr += 30;
-	DPRINT("\n got request for target.xml: %s", &ipktPtr[30]);
+	GDR_DPRINTF("\n got request for target.xml: %s", &ipktPtr[30]);
 	if (hexToInt(&ipktPtr, &offset)
 	  && *ipktPtr++ == ','
 	    && hexToInt(&ipktPtr, &len)) {
-	  DPRINT("\n got request for target.xml: offset:%lu len:%lu docLen=%lu\n",
+	  GDR_DPRINTF("\n got request for target.xml: offset:%lu len:%lu docLen=%lu\n",
 		 offset, len, docLen);
 	  if (offset > docLen) {
 	    // case 1: request past end
@@ -595,12 +604,12 @@ processPackets(struct GdbRemoteDesc *grd)
       uint64_t addr;
       uint64_t len;
       char *memData;
-      DPRINT("GDB: m:");
+      GDR_DPRINTF("GDB: m:");
       if (hexToInt(&ipktPtr, &addr)
 	         && *ipktPtr++ == ','
 	         && hexToInt(&ipktPtr, &len))
 	    {
-        DPRINT("%016lx: %lu\n", addr, len);
+        GDR_DPRINTF("%016lx: %lu\n", addr, len);
         if (gdbGetMem(state, addr, len, &memData) == len) {
           outBytes = mem2hex(&(opkt[0]), GDBREMOTE_BUFMAX, memData, len);
         } else {
@@ -615,13 +624,13 @@ processPackets(struct GdbRemoteDesc *grd)
       uint64_t addr;
       uint64_t len;
       char *memData;
-      DPRINT("GDB: M\n");
+      GDR_DPRINTF("GDB: M\n");
       if (hexToInt(&ipktPtr, &addr)
 	         && *ipktPtr++ == ','
 	         && hexToInt(&ipktPtr, &len)
 	         && *ipktPtr++ == ':')	
       {
-        DPRINT("%016lx: %lu : %s\n", addr, len, ipktPtr);
+        GDR_DPRINTF("%016lx: %lu : %s\n", addr, len, ipktPtr);
         if (gdbGetMem(state, addr, len, &memData) == len) {
           hex2mem(ipktPtr, memData, len);
           outBytes = snprintf(&(opkt[0]), GDBREMOTE_BUFMAX, "OK");
@@ -636,10 +645,10 @@ processPackets(struct GdbRemoteDesc *grd)
     {
       union GdbRegState *reg = &(grd->regState);
       uint64_t regnum;
-      DPRINT("GDB: P\n");
+      GDR_DPRINTF("GDB: P\n");
       if (hexToInt(&ipktPtr, &regnum)
 	  && *ipktPtr++ == '=' ) {
-	DPRINT("GDB: regnum=%lu value=%s\n", regnum, ipktPtr);
+	GDR_DPRINTF("GDB: regnum=%lu value=%s\n", regnum, ipktPtr);
 	if (gdbGetRegisters(state, reg)) {
 	  // long mode
 	  if (regnum < REG64_NUMREG) {
@@ -647,7 +656,7 @@ processPackets(struct GdbRemoteDesc *grd)
 	    unsigned int offset = rm->offset;
 	    unsigned int len = rm->len;
 	    char * regData = ((char *)(&(reg->reg64State))) + offset;
-	    DPRINT("GDB: rm: %u, %u, %s\n", offset, len, rm->name);
+	    GDR_DPRINTF("GDB: rm: %u, %u, %s\n", offset, len, rm->name);
 	    hex2mem(ipktPtr, regData, len);
 	  } else {
 	    outBytes = snprintf(&(opkt[0]), GDBREMOTE_BUFMAX, "E03");
@@ -658,7 +667,7 @@ processPackets(struct GdbRemoteDesc *grd)
 	    unsigned int offset = rm->offset;
 	    unsigned int len = rm->len;
 	    char * regData = ((char *)(&(reg->reg32State))) + offset;
-	    DPRINT("GDB: rm: %u, %u, %s\n", offset, len, rm->name);
+	    GDR_DPRINTF("GDB: rm: %u, %u, %s\n", offset, len, rm->name);
 	    hex2mem(ipktPtr, regData, len);
 	  } else {
 	    outBytes = snprintf(&(opkt[0]), GDBREMOTE_BUFMAX, "E03");
@@ -675,30 +684,30 @@ processPackets(struct GdbRemoteDesc *grd)
     }
     break;
   case 'c':
-    DPRINT("GDB: c\n");
+    GDR_DPRINTF("GDB: c\n");
     setSignal(grd, GDB_SIGNAL_0);
     skipPut = 1;
     singleStepOff(grd);
     rc = DONE_PACKETS;
     break;
   case 'k':
-    DPRINT("GDB: k\n");
+    GDR_DPRINTF("GDB: k\n");
     gdbKill(state);
     skipPut = 1;
     rc = DONE_PACKETS;
     break;
   case 'r':
-    DPRINT("GDB: r\n");
+    GDR_DPRINTF("GDB: r\n");
     break;
   case 's':
-    DPRINT("GDB: s\n");
+    GDR_DPRINTF("GDB: s\n");
     setSignal(grd, GDB_SIGNAL_0);
     skipPut = 1;
     singleStepOn(grd);
     rc = DONE_PACKETS;
     break;
   default:
-    DPRINT("GDB: Unknown packet\n");
+    GDR_DPRINTF("GDB: Unknown packet\n");
     // send empty reply
   }
   if (!skipPut) putpacket(grd,outBytes);
@@ -745,12 +754,12 @@ fileProtocolReadMem(struct GdbRemoteDesc *grd, char *ipkt, uint64_t faddr, const
   uint64_t len;
   char *memData;
   
-  DPRINT("\nfileProtocolReadMem: faddr:%lx buf:%p written:%d targetMem:%d count:%d m:", faddr, buf, written, targetMem, count);
+  GDR_DPRINTF("\nfileProtocolReadMem: faddr:%lx buf:%p written:%d targetMem:%d count:%d m:", faddr, buf, written, targetMem, count);
   if (hexToInt(&ipkt, &addr)
       && *ipkt++ == ','
       && hexToInt(&ipkt, &len)) {
     if ((addr == faddr) && (len <= count)) {
-      DPRINT("%016lx: %lu\n", addr, len);
+      GDR_DPRINTF("%016lx: %lu\n", addr, len);
       if (targetMem) {
   if (gdbGetMem(state, addr+written, len, &memData) == len)  {
     olen=mem2hex(&(opkt[0]), GDBREMOTE_BUFMAX, memData,  len);
@@ -782,24 +791,24 @@ fileProtocolWriteMem(struct GdbRemoteDesc *grd, char *ipkt, uint64_t faddr, void
   uint64_t len;
   char *memData;
 
-  DPRINT("\nfileProtocolWriteMem: faddr:%lx buf:%p read:%d targetMem:%d count:%d m:", faddr, buf, read, targetMem, count);
+  GDR_DPRINTF("\nfileProtocolWriteMem: faddr:%lx buf:%p read:%d targetMem:%d count:%d m:", faddr, buf, read, targetMem, count);
   if (hexToInt(&ipkt, &addr)
       && *ipkt++ == ','
       && hexToInt(&ipkt, &len)
       && *ipkt++ == ':') {
     if ((addr == faddr) && (len <= count)) {
-      DPRINT("%016lx: %lu\n", addr, len);
+      GDR_DPRINTF("%016lx: %lu\n", addr, len);
       if (targetMem) {
         if (gdbGetMem(state, addr+read, len, &memData) == len)  {
-          DPRINT("%s:%d\n", __func__, __LINE__);
+          GDR_DPRINTF("%s:%d\n", __func__, __LINE__);
           hex2mem(ipkt, memData, len);
           olen = snprintf(&(opkt[0]), GDBREMOTE_BUFMAX, "OK");
         } else {
-          DPRINT("%s:%d\n", __func__, __LINE__);
+          GDR_DPRINTF("%s:%d\n", __func__, __LINE__);
           olen = snprintf(&(opkt[0]), GDBREMOTE_BUFMAX, "E03");
         }
       } else {
-        DPRINT("%s:%d\n", __func__, __LINE__);
+        GDR_DPRINTF("%s:%d\n", __func__, __LINE__);
         hex2mem(ipkt, buf+read, len);
         olen = snprintf(&(opkt[0]), GDBREMOTE_BUFMAX, "OK");
       }
@@ -873,14 +882,14 @@ GdbRead(struct GdbRemoteDesc *grd, int fd, void *buf, unsigned int count,
 
   while (1) {
     ipkt = getpacket(grd);
-    DPRINT("\nGdbReadConsole: %s\n", ipkt);
+    GDR_DPRINTF("\nGdbReadConsole: %s\n", ipkt);
     // reset output packet
     opkt[0] = 0;
 
     switch  (*ipkt++)  {
       case 'M': {
         n = fileProtocolWriteMem(grd, ipkt, FreadAddr, buf, read, targetMem, count);
-        DPRINT("%s:%d\n", __func__, __LINE__);
+        GDR_DPRINTF("%s:%d\n", __func__, __LINE__);
       }
         break;
         case 'F': {
@@ -917,7 +926,7 @@ GdbRead(struct GdbRemoteDesc *grd, int fd, void *buf, unsigned int count,
       goto done;
     }
       // case 'F': {
-      //   DPRINT("%s:%d\n", __func__, __LINE__);
+      //   GDR_DPRINTF("%s:%d\n", __func__, __LINE__);
       // }
         break;
     }
@@ -965,14 +974,14 @@ GdbWrite(struct GdbRemoteDesc *grd, int fd, const void *buf, unsigned int count,
   //    No nesting or multiplexing of request reply transactions
   while (1) {
     ipkt = getpacket(grd);
-    DPRINT("GdbWriteConsole: %s", ipkt);
+    GDR_DPRINTF("GdbWriteConsole: %s", ipkt);
     // reset output packet
     opkt[0] = 0;
   
     switch  (*ipkt++)  {
     case 'm': {
      n = fileProtocolReadMem(grd, ipkt, FwriteAddr, buf, written, targetMem, count);
-        DPRINT("%s:%d\n", __func__, __LINE__);
+        GDR_DPRINTF("%s:%d\n", __func__, __LINE__);
   }
   break;
     case 'F': {
@@ -1040,3 +1049,4 @@ GdbRemoteLoop(struct GdbRemoteDesc *grd)
     while (processPackets(grd));
   }
 }
+

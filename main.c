@@ -6,7 +6,26 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include <sys/ioctl.h>
+#include <sys/mman.h>
+#include <sys/stat.h>
+#include <sys/errno.h>
+#include <sys/types.h>
+#include <unistd.h>
+#include <inttypes.h>
+#include <sched.h>
+
 #include "gdbremote.h"
+
+// put gdb remote code into debug mode ... will put debug info
+// into DLOG_FILE
+#define DEBUG
+
+#ifdef DEBUG
+#define DLOG_FILE "gdbremote.dlog"
+#else
+#define DLOG_FILE NULL
+#endif
 
 // example of how to pin this process to a cpu
 // not needed but figured it is worth keeping
@@ -19,33 +38,29 @@
 
 struct GdbRemoteDesc grd;
 
-#define DEBUG
-
-#define DLOGFILE "gdbremote.dlog"
-FILE *DLOG = NULL;
-
-#ifdef DEBUG
-#define DPRINT(str) {{fprintf(DLOG, str);} 
-#define DPRINTF(fmt, ...) {fprintf(DLOG, fmt, __VA_ARGS__ );} 
-#define DSTMT(stmt) { stmt; }
-#else
-#define VPRINT(fmt, ...) 
-#define VERBOSE(stmt) 
-#endif
-
 
 static void
 gdbPutChar(void *ptr, char c)
 {
+  // FIXME:  JA takecare of detecting errors like gdb connection lost here
+  if (write(STDOUT_FILENO, &c, 1)!=1) err(1, "stdout closed");
 }
 
 static char
 gdbGetChar(void *ptr)
 {
+  char c;
+
+  // FIXME:  JA takecare of detecting errors like gdb connection lost here
+ again:
+  if (read(STDIN_FILENO, &c, 1)<=0) {
+    if (errno == EINTR || errno == EAGAIN) goto again;
+    err(1, "stdin closed");
+  }
+  return c;
 }
 
 struct GdbRemoteDesc grd;  
-
 
 int pinCpu(int);
 
@@ -55,11 +70,6 @@ int main(int argc, char **argv)
   // for good measure (not really necessary given that it is in bss)
   bzero(&grd, sizeof(grd));
 
-#ifdef DEBUG
-  DLOG = fopen(DLOGFILE, "w+");
-  if (DLOG == NULL) err(1, "DLOG");
-  setbuf(DLOG, NULL);
-#endif
 
 #ifdef PIN_CPU
   int cpu;  
@@ -68,9 +78,8 @@ int main(int argc, char **argv)
 
   
   GdbRemoteInit(&grd, // Gdb remote protocol state
-		DLOG,
-		NULL,  // Gdb remote protocol processing code passes this
- 		       // pointer back to all our functions
+		DLOG_FILE,
+		NULL,    // pointer that will be passed back to all our gdbops
 		(GdbRemoteGetChar) gdbGetChar,
 		(GdbRemotePutChar) gdbPutChar,
 		0,  // do not start in single step mode
@@ -102,7 +111,5 @@ int pinCpu(int cpu)
     err(1, "could not pin to cpu=%d",cpu);
   }
 
-  if (GS.debug) {
-    fprintf(GS.DLOG, "PINNED TO CPU: %d\n", cpu);
-  }
+  GDR_DPRINTF("PINNED TO CPU: %d\n", cpu);
 }

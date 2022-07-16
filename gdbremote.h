@@ -1,6 +1,10 @@
 #ifndef __GDB_REMOTE_H__
 #define __GDB_REMOTE_H__
 
+extern FILE *DLOGFILE;
+
+#define GDR_DPRINTF(...) { if (DLOGFILE) fprintf (DLOGFILE, __VA_ARGS__); }
+
 typedef char (*GdbRemoteGetChar)(void *state);
 typedef void (*GdbRemotePutChar)(void *state, char c);
 
@@ -209,7 +213,7 @@ struct GdbRemoteDesc {
 };
 
 extern  void GdbRemoteInit(struct GdbRemoteDesc *grd,
-			   FILE *dlog,
+			   char *dlogPath,
 			   void *state,
 			   GdbRemoteGetChar gcf,
 			   GdbRemotePutChar pcf,

@@ -53,3 +53,9 @@ dkms.conf
 
 # Editor backup files
 *~
+
+# gdb source
+gdb-*
+
+# final executable
+gdbRemote
