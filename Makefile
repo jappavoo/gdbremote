@@ -1,6 +1,8 @@
 CFLAGS=-g -c
 
 GDBSRC=gdb-12.1
+# To document that when developing this code originally we were using gdb-8.3.1
+#GDBSRC=gdb-8.3.1
 
 .PHONEY: distclean clean
 
